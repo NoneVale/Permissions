@@ -1,10 +1,14 @@
 package net.nighthawkempires.permissions.group.registry;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import net.nighthawkempires.core.datasection.DataSection;
 import net.nighthawkempires.core.datasection.Registry;
+import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.group.GroupModel;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 public interface GroupRegistry extends Registry<GroupModel> {
@@ -17,7 +21,7 @@ public interface GroupRegistry extends Registry<GroupModel> {
     default GroupModel getGroup(String name) {
         if (!groupExists(name)) return null;
 
-        return fromKey(name).orElseGet(null);
+        return fromKey(name.toLowerCase()).orElseGet(null);
     }
 
     default GroupModel getDefaultGroup() {
@@ -35,6 +39,10 @@ public interface GroupRegistry extends Registry<GroupModel> {
         remove(getGroup(name));
     }
 
+    default void deleteGroup(GroupModel groupModel) {
+        remove(groupModel);
+    }
+
     default GroupModel createDefaultGroup() {
         createGroup("default", "&7Default");
         GroupModel groupModel = getGroup("default");
@@ -44,15 +52,161 @@ public interface GroupRegistry extends Registry<GroupModel> {
 
     default ImmutableList<GroupModel> getGroups() {
         if (getRegisteredData().size() > 0) {
-            return ImmutableList.copyOf(getRegisteredData().values());
+            List<GroupModel> groups = Lists.newArrayList(getRegisteredData().values());
+            groups.sort(Comparator.comparing(GroupModel::getGroupChain).thenComparing(GroupModel::getGroupPriority));
+
+            return ImmutableList.copyOf(groups);
         }
+
         return ImmutableList.of();
+    }
+
+    default void reloadPerms() {
+        for (GroupModel groupModel : getGroups()) {
+            addInheritedPerms(groupModel);
+        }
+    }
+
+    default void addInheritedPerms(GroupModel groupModel) {
+        for (String string : groupModel.getInheritedGroups()) {
+            GroupModel inheritedGroup = getGroup(string);
+            if (inheritedGroup != null) {
+                addInheritedPerms(inheritedGroup);
+                groupModel.clearInheritedPermissions();
+                for (String perm : inheritedGroup.getPermissions()) {
+                    if (!groupModel.getInheritedPermissions().contains(perm))
+                        groupModel.addInheritedPermission(perm);
+                }
+                for (String perm : inheritedGroup.getInheritedPermissions()) {
+                    if (!groupModel.getInheritedPermissions().contains(perm))
+                        groupModel.addInheritedPermission(perm);
+                }
+            }
+        }
+    }
+
+    default GroupModel getNextGroupUp(GroupModel groupModel) {
+        if (groupModel.getGroupChain() == getHighestChain()
+                && groupModel.getGroupPriority() == getHighestPriorityInChain(groupModel.getGroupChain())) return null;
+
+        if (groupModel.getGroupPriority() != getHighestPriorityInChain(groupModel.getGroupChain())) {
+            return getGroup(groupModel.getGroupChain(), getNextPriorityUp(groupModel));
+        } else {
+            return getGroup(getNextChainUp(groupModel), getLowestPriorityInChain(getNextChainUp(groupModel)));
+        }
+    }
+
+    default GroupModel getNextGroupDown(GroupModel groupModel) {
+        if (groupModel.getGroupChain() == getLowestChain()
+                && groupModel.getGroupPriority() == getLowestPriorityInChain(groupModel.getGroupChain())) return null;
+
+        if (groupModel.getGroupPriority() != getLowestPriorityInChain(groupModel.getGroupChain())) {
+            return getGroup(groupModel.getGroupChain(), getNextPriorityDown(groupModel));
+        } else {
+            return getGroup(getNextChainDown(groupModel), getHighestPriorityInChain(getNextChainDown(groupModel)));
+        }
+    }
+
+    default int getHighestChain() {
+        int highest = -1;
+        for (GroupModel groupModel : getGroups()) {
+            if (highest == -1) highest = groupModel.getGroupChain();
+
+            if (groupModel.getGroupChain() > highest) highest = groupModel.getGroupChain();
+        }
+
+        return highest;
+    }
+
+    default int getLowestChain() {
+        int lowest = -1;
+        for (GroupModel groupModel : getGroups()) {
+            if (lowest == -1) lowest = groupModel.getGroupChain();
+
+            if (groupModel.getGroupChain() < lowest && groupModel.getGroupChain() > 0) lowest = groupModel.getGroupChain();
+        }
+
+        return lowest;
+    }
+
+    default int getHighestPriorityInChain(int chain) {
+        int highest = -1;
+        for (GroupModel groupModel : getGroupsInChain(chain)) {
+            if (highest == -1) highest = groupModel.getGroupPriority();
+
+            if (groupModel.getGroupPriority() > highest) highest = groupModel.getGroupPriority();
+        }
+
+        return highest;
+    }
+
+    default int getLowestPriorityInChain(int chain) {
+        int lowest = -1;
+        for (GroupModel groupModel : getGroupsInChain(chain)) {
+            if (lowest == -1) lowest = groupModel.getGroupPriority();
+
+            if (groupModel.getGroupPriority() < lowest
+                    && groupModel.getGroupPriority() > 0) lowest = groupModel.getGroupPriority();
+        }
+        return lowest;
+    }
+
+    default GroupModel getGroup(int chain, int priority) {
+        for (GroupModel groupModel : getGroups())
+            if (groupModel.getGroupChain() == chain && groupModel.getGroupPriority() == priority) return groupModel;
+        return null;
+    }
+
+    default int getNextChainUp(GroupModel groupModel) {
+        int chain = groupModel.getGroupChain() + 1;
+        while (getGroupsInChain(chain).isEmpty() && chain < getHighestChain()) {
+            chain++;
+        }
+
+        return chain;
+    }
+
+    default int getNextChainDown(GroupModel groupModel) {
+        int chain = groupModel.getGroupChain() - 1;
+        while (getGroupsInChain(chain).isEmpty() && chain > getLowestChain()) {
+            chain--;
+        }
+
+        return chain;
+    }
+
+    default int getNextPriorityUp(GroupModel groupModel) {
+        int priority = groupModel.getGroupPriority() + 1;
+        while (getGroup(groupModel.getGroupChain(), priority) == null && priority < getHighestPriorityInChain(groupModel.getGroupChain())) {
+            priority++;
+        }
+
+        return priority;
+    }
+
+    default int getNextPriorityDown(GroupModel groupModel) {
+        int priority = groupModel.getGroupPriority() - 1;
+        while (getGroup(groupModel.getGroupChain(), priority) == null && priority > getLowestPriorityInChain(groupModel.getGroupChain())) {
+            priority--;
+        }
+
+        return priority;
+    }
+
+    default ImmutableList<GroupModel> getGroupsInChain(int chain) {
+        List<GroupModel> groups = Lists.newArrayList();
+        for (GroupModel groupModel : getGroups()) {
+            if (groupModel.getGroupChain() == chain) {
+                groups.add(groupModel);
+            }
+        }
+        return ImmutableList.copyOf(groups);
     }
 
     @Deprecated
     Map<String, GroupModel> getRegisteredData();
 
     default boolean groupExists(String name) {
-        return fromKey(name).isPresent();
+        return fromKey(name.toLowerCase()).isPresent();
     }
 }

@@ -1,0 +1,26 @@
+name: Permissions
+version: 1.0.0-SNAPSHOT
+main: net.nighthawkempires.permissions.PermissionsPlugin
+description: Nighthawk Empires' Permissions Plugin.
+author: NoneVale_
+api-version: 1.15
+depend: [Core]
+commands:
+  demote:
+    usage: </command>
+    description: Demote command for Nighthawk Empires' Permissions Plugin.
+  group:
+    aliases: [groups]
+    usage: </command>
+    description: Group command for Nighthawk Empires' Permissions Plugin
+  permissions:
+    aliases: [perms, permission, perm]
+    usage: </command>
+    description: Permissions command for Nighthawk Empires' Permissions Plugin.
+  promote:
+    usage: </command>
+    description: Promote command for Nighthawk Empires' Permissions Plugin.
+  status:
+    usage: </command>
+    description: Status command for Nighthawk Empires' Permissions Plugin.
+

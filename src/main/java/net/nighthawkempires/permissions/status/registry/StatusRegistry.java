@@ -17,7 +17,7 @@ public interface StatusRegistry extends Registry<StatusModel> {
     default StatusModel getStatus(String name) {
         if (!statusExists(name)) return null;
 
-        return fromKey(name).orElseGet(null);
+        return fromKey(name.toLowerCase()).orElseGet(null);
     }
 
     default void createStatus(String name, String prefix) {
@@ -26,6 +26,10 @@ public interface StatusRegistry extends Registry<StatusModel> {
 
     default void deleteStatus(String name) {
         remove(getStatus(name));
+    }
+
+    default void deleteStatus(StatusModel statusModel) {
+        remove(statusModel);
     }
 
     default ImmutableList<StatusModel> getStatuses() {
@@ -39,6 +43,6 @@ public interface StatusRegistry extends Registry<StatusModel> {
     Map<String, StatusModel> getRegisteredData();
 
     default boolean statusExists(String name) {
-        return fromKey(name).isPresent();
+        return fromKey(name.toLowerCase()).isPresent();
     }
 }
