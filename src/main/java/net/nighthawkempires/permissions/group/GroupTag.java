@@ -24,11 +24,11 @@ public class GroupTag extends PlayerTag {
 
                 StringBuilder stringBuilder = new StringBuilder();
                 for (GroupModel groupModel : userModel.getGroups()) {
-                    stringBuilder.append("\n&7- ").append(groupModel.getPrefix(), 0, 2).append("&l").append(groupModel.getName());
+                    stringBuilder.append("\n&8 ➛ ").append(groupModel.getColoredName());
                 }
 
                 tag.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, TextComponent.fromLegacyText(
-                        ChatColor.translateAlternateColorCodes('&', "&8&lGroups&7&l: " + stringBuilder.toString()))));
+                        ChatColor.translateAlternateColorCodes('&', "&7Groups: " + stringBuilder.toString()))));
 
                 return tag;
             }

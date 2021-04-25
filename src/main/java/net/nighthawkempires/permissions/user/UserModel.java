@@ -5,10 +5,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import net.nighthawkempires.core.datasection.DataSection;
 import net.nighthawkempires.core.datasection.Model;
+import net.nighthawkempires.core.server.ServerType;
 import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.group.GroupModel;
 import net.nighthawkempires.permissions.status.StatusModel;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +23,8 @@ public class UserModel implements Model {
 
     private List<String> permissions;
     private List<GroupModel> groups;
+
+    private HashMap<String, List<String>> serverPermissions;
 
     private StatusModel status;
 
@@ -31,6 +37,8 @@ public class UserModel implements Model {
         this.permissions = Lists.newArrayList();
         this.groups = Lists.newArrayList();
         addGroup(PermissionsPlugin.getGroupRegistry().getDefaultGroup());
+
+        this.serverPermissions = Maps.newHashMap();
 
         this.status = null;
     }
@@ -48,6 +56,14 @@ public class UserModel implements Model {
         }
 
         if (this.groups.isEmpty()) this.groups.add(PermissionsPlugin.getGroupRegistry().getDefaultGroup());
+
+        this.serverPermissions = Maps.newHashMap();
+        if (data.isSet("server-permissions")) {
+            DataSection server = data.getSectionNullable("server-permissions");
+            for (String s : server.keySet()) {
+                this.serverPermissions.put(s, server.getStringList(s));
+            }
+        }
 
         if (data.isSet("status")) {
             this.status = PermissionsPlugin.getStatusRegistry().getStatus(data.getString("status"));
@@ -75,18 +91,87 @@ public class UserModel implements Model {
         return this.permissions.contains(permission);
     }
 
-    public ImmutableList<GroupModel> getGroups() {
-        return ImmutableList.copyOf(this.groups);
+    public ImmutableList<String> getPermissions(ServerType server) {
+        List<String> permissions = this.serverPermissions.containsKey(server.name())
+                ? this.serverPermissions.get(server.name()) : Lists.newArrayList();
+
+        return ImmutableList.copyOf(permissions);
     }
 
-    public void addGroup(GroupModel group) {
-        if (!this.groups.contains(group))
-            this.groups.add(group);
+    public void addPermission(ServerType server, String permission) {
+        if (!this.serverPermissions.containsKey(server.name())) {
+            this.serverPermissions.put(server.name(), Lists.newArrayList());
+        }
+
+        if (!this.serverPermissions.get(server.name()).contains(permission))
+            this.serverPermissions.get(server.name()).add(permission);
+
+        PermissionsPlugin.getUserRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getUniqueId().toString().equals(key)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
+    }
+
+    public void removePermission(ServerType server, String permission) {
+        if (this.serverPermissions.containsKey(server.name())) {
+            this.serverPermissions.get(server.name()).remove(permission);
+
+            if (this.serverPermissions.get(server.name()).isEmpty()) {
+                this.serverPermissions.remove(server.name());
+            }
+        }
+
+        PermissionsPlugin.getUserRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getUniqueId().toString().equals(key)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
+    }
+
+    public boolean hasPermission(ServerType server, String permission) {
+        return getPermissions(server).contains(permission);
+    }
+
+    public List<GroupModel> getGroups() {
+        List<GroupModel> latestGroups = Lists.newArrayList();
+        for (GroupModel groupModel : this.groups) {
+            GroupModel group = PermissionsPlugin.getGroupRegistry().getGroup(groupModel.getName());
+            latestGroups.add(group);
+        }
+
+        return ImmutableList.copyOf(latestGroups);
+    }
+
+    public boolean hasGroup(GroupModel groupModel) {
+        for (GroupModel group : groups) {
+            if ((group.getKey().toLowerCase().equals(groupModel.getKey().toLowerCase()))
+                    || (groupModel == group)) return true;
+        }
+        return false;
+    }
+
+    public void addGroup(GroupModel groupModel) {
+        boolean add = true;
+        for (GroupModel group : groups) {
+            if ((group.getKey().toLowerCase().equals(groupModel.getKey().toLowerCase()))
+                    || (groupModel == group)) {
+                add = false;
+            };
+        }
+
+        if (add) groups.add(groupModel);
+
         PermissionsPlugin.getUserRegistry().register(this);
     }
 
-    public void removeGroup(GroupModel group) {
-        this.groups.remove(group);
+    public void removeGroup(GroupModel groupModel) {
+        groups.removeIf(group -> (group.getKey().toLowerCase().equals(groupModel.getKey().toLowerCase()))
+                || (groupModel == group));
         PermissionsPlugin.getUserRegistry().register(this);
     }
 
@@ -123,7 +208,15 @@ public class UserModel implements Model {
     }
 
     public StatusModel getStatus() {
-        return this.status;
+        if (this.status == null) return null;
+        StatusModel statusModel = null;
+        for (StatusModel model : PermissionsPlugin.getStatusRegistry().getStatuses()) {
+            if (this.status.getKey().equals(model.getKey())) {
+                statusModel = model;
+                break;
+            }
+        }
+        return statusModel;
     }
 
     public void setStatus(StatusModel status) {
@@ -148,6 +241,9 @@ public class UserModel implements Model {
             groups.add(groupModel.getKey());
         }
         map.put("groups", groups);
+
+        if (this.serverPermissions == null) this.serverPermissions = Maps.newHashMap();
+        map.put("server-permissions", this.serverPermissions);
 
         if (status != null) {
             map.put("status", status.getKey());

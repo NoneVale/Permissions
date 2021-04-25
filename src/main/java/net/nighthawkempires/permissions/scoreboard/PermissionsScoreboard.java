@@ -4,6 +4,7 @@ import net.nighthawkempires.core.CorePlugin;
 import net.nighthawkempires.core.lang.Messages;
 import net.nighthawkempires.core.scoreboard.NEScoreboard;
 import net.nighthawkempires.core.settings.ConfigModel;
+import net.nighthawkempires.core.util.StringUtil;
 import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.user.UserModel;
 import org.bukkit.Bukkit;
@@ -39,50 +40,37 @@ public class PermissionsScoreboard extends NEScoreboard {
         objective.setDisplayName(CorePlugin.getMessages().getMessage(Messages.SCOREBOARD_HEADER).replaceAll("%SERVER%",
                 CorePlugin.getMessages().getServerTag(getConfig().getServerType())));
         Team top = scoreboard.registerNewTeam("top");
-        top.addEntry(ChatColor.GRAY + " ➛  " + ChatColor.BLUE + "" + ChatColor.BOLD);
+        top.addEntry(ChatColor.DARK_GRAY + "" + ChatColor.BOLD + " ➛  " + ChatColor.BLUE);
         top.setPrefix("");
         top.setSuffix("");
         Team middle = scoreboard.registerNewTeam("middle");
-        middle.addEntry(ChatColor.GRAY + " ➛  " + ChatColor.GREEN + "" + ChatColor.BOLD);
+        middle.addEntry(ChatColor.DARK_GRAY + "" + ChatColor.BOLD + " ➛  " + ChatColor.GREEN);
         middle.setPrefix("");
         middle.setSuffix("");
         Team bottom = scoreboard.registerNewTeam("bottom");
-        bottom.addEntry(ChatColor.GRAY + " ➛  " + ChatColor.GOLD + "" + ChatColor.BOLD);
+        bottom.addEntry(ChatColor.DARK_GRAY + "" + ChatColor.BOLD + " ➛  " + ChatColor.GOLD);
         bottom.setPrefix("");
         bottom.setSuffix("");
 
-        objective.getScore(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "" + ChatColor.BOLD + "--------------")
-                .setScore(10);
-        objective.getScore(ChatColor.GRAY + "" + ChatColor.BOLD + " Main Group" + ChatColor.GRAY + ": ").setScore(9);
-        objective.getScore(ChatColor.GRAY + " ➛  " + ChatColor.BLUE + "" + ChatColor.BOLD).setScore(8);
-        //op.setSuffix(player.getName());
-        top.setSuffix(userModel.getHighestRankingGroup().getBoldColoredName());
+        objective.getScore(ChatColor.GRAY + " Main Group" + ChatColor.GRAY + ": ").setScore(9);
+        objective.getScore(ChatColor.DARK_GRAY + "" + ChatColor.BOLD + " ➛  " + ChatColor.BLUE).setScore(8);
         objective.getScore(ChatColor.DARK_PURPLE + " ").setScore(7);
-        objective.getScore(ChatColor.GRAY + "" + ChatColor.BOLD + " Groups" + ChatColor.GRAY + ": ")
-                .setScore(6);
-        objective.getScore(ChatColor.GRAY + " ➛  " + ChatColor.GREEN + "" + ChatColor.BOLD).setScore(5);
-        middle.setSuffix(userModel.getGroups().size() + "");
+        objective.getScore(ChatColor.GRAY + "Groups" + ChatColor.GRAY + ": ").setScore(6);
+        objective.getScore(ChatColor.DARK_GRAY + "" + ChatColor.BOLD + " ➛  " + ChatColor.GREEN).setScore(5);
         objective.getScore(ChatColor.YELLOW + "  ").setScore(4);
-        objective.getScore(ChatColor.GRAY + "" + ChatColor.BOLD + " Status" + ChatColor.GRAY + ": ").setScore(3);
-        objective.getScore(ChatColor.GRAY + " ➛  " + ChatColor.GOLD + "" + ChatColor.BOLD).setScore(2);
-        if (userModel.getStatus() == null)
-            bottom.setSuffix("None");
-        else
-            bottom.setSuffix(userModel.getStatus().getBoldColoredName());
-        objective.getScore(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "" + ChatColor.BOLD + "--------------")
+        objective.getScore(ChatColor.GRAY + " Status" + ChatColor.GRAY + ": ").setScore(3);
+        objective.getScore(ChatColor.DARK_GRAY + "" + ChatColor.BOLD + " ➛  " + ChatColor.GOLD).setScore(2);
+        objective.getScore(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "" + ChatColor.BOLD + "━━━━━━━━━━━━━━━━━━━━━━")
                 .setScore(1);
 
         this.taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(CorePlugin.getPlugin(), () -> {
-            top.setSuffix(userModel.getHighestRankingGroup().getBoldColoredName());
-            middle.setSuffix(userModel.getGroups().size() + "");
+            top.setSuffix(userModel.getHighestRankingGroup().getColoredName());
+            middle.setSuffix(ChatColor.GOLD + "" + userModel.getGroups().size());
             if (userModel.getStatus() == null)
-                bottom.setSuffix("None");
+                bottom.setSuffix(ChatColor.GRAY + "None");
             else
-                bottom.setSuffix(userModel.getStatus().getBoldColoredName());
-            }, 0 , 5);
-        Bukkit.getScheduler().scheduleSyncDelayedTask(CorePlugin.getPlugin(), () -> {
-            Bukkit.getScheduler().cancelTask(getTaskId());
-        }, 295);
+                bottom.setSuffix(userModel.getStatus().getColoredName());
+        }, 0 , 5);
         return scoreboard;
     }
 

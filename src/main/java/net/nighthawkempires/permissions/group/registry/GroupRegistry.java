@@ -2,14 +2,17 @@ package net.nighthawkempires.permissions.group.registry;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import net.nighthawkempires.core.CorePlugin;
 import net.nighthawkempires.core.datasection.DataSection;
 import net.nighthawkempires.core.datasection.Registry;
 import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.group.GroupModel;
 
+import java.util.Calendar;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public interface GroupRegistry extends Registry<GroupModel> {
     String NAME = "groups";
@@ -51,7 +54,7 @@ public interface GroupRegistry extends Registry<GroupModel> {
     }
 
     default ImmutableList<GroupModel> getGroups() {
-        if (getRegisteredData().size() > 0) {
+        if (loadAllFromDb().values().size() > 0) {
             List<GroupModel> groups = Lists.newArrayList(getRegisteredData().values());
             groups.sort(Comparator.comparing(GroupModel::getGroupChain).thenComparing(GroupModel::getGroupPriority));
 
@@ -201,6 +204,68 @@ public interface GroupRegistry extends Registry<GroupModel> {
             }
         }
         return ImmutableList.copyOf(groups);
+    }
+
+    default ImmutableList<String> getGroupPermissions(GroupModel groupModel) {
+        List<String> permissions = Lists.newArrayList();
+        permissions.addAll(groupModel.getPermissions());
+
+        List<String> finalPerms = permissions.stream().distinct().collect(Collectors.toList());
+        return ImmutableList.copyOf(finalPerms);
+    }
+
+    default ImmutableList<String> getInheritedPermissions(GroupModel groupModel) {
+        List<String> permissions = Lists.newArrayList();
+        if (groupModel.getInheritedGroups().size() > 0) {
+            for (String s : groupModel.getInheritedGroups()) {
+                GroupModel group = getGroup(s);
+                permissions.addAll(getInheritedPermissions(group));
+                permissions.addAll(group.getPermissions());
+            }
+        }
+
+        List<String> finalPerms = permissions.stream().distinct().collect(Collectors.toList());
+        return ImmutableList.copyOf(finalPerms);
+    }
+
+    default ImmutableList<String> getAllPermissions(GroupModel groupModel) {
+        List<String> permissions = Lists.newArrayList();
+        if (groupModel.getInheritedGroups().size() > 0) {
+            for (String s : groupModel.getInheritedGroups()) {
+                GroupModel group = getGroup(s);
+                permissions.addAll(getAllPermissions(group));
+                permissions.addAll(group.getPermissions());
+                permissions.addAll(group.getPermissions(CorePlugin.getConfigg().getServerType()));
+            }
+        }
+        permissions.addAll(groupModel.getPermissions());
+        permissions.addAll(groupModel.getPermissions(CorePlugin.getConfigg().getServerType()));
+
+        List<String> finalPerms = permissions.stream().distinct().collect(Collectors.toList());
+        return ImmutableList.copyOf(finalPerms);
+    }
+
+    default ImmutableList<String> getServerPermissions(GroupModel groupModel) {
+        List<String> permissions = Lists.newArrayList();
+        if (groupModel.getInheritedGroups().size() > 0) {
+            for (String s : groupModel.getInheritedGroups()) {
+                GroupModel group = getGroup(s);
+                permissions.addAll(getServerPermissions(group));
+                permissions.addAll(group.getPermissions(CorePlugin.getConfigg().getServerType()));
+            }
+        }
+        permissions.addAll(groupModel.getPermissions(CorePlugin.getConfigg().getServerType()));
+
+        List<String> finalPerms = permissions.stream().distinct().collect(Collectors.toList());
+        return ImmutableList.copyOf(finalPerms);
+    }
+
+    default List<String> getGroupNameList() {
+        List<String> names = Lists.newArrayList();
+        for (GroupModel groupModel : loadAllFromDb().values()) {
+            names.add(groupModel.getName());
+        }
+        return names;
     }
 
     @Deprecated

@@ -3,11 +3,17 @@ package net.nighthawkempires.permissions.group;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import jdk.nashorn.internal.ir.IfNode;
 import net.nighthawkempires.core.datasection.DataSection;
 import net.nighthawkempires.core.datasection.Model;
+import net.nighthawkempires.core.server.ServerType;
 import net.nighthawkempires.permissions.PermissionsPlugin;
+import net.nighthawkempires.permissions.user.UserModel;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +30,8 @@ public class GroupModel implements Model {
     private List<String> permissions;
     private List<String> tempPermissions;
 
+    private HashMap<String, List<String>> serverPermissions;
+
     private int groupChain;
     private int groupPriority;
     private int usersInGroup;
@@ -39,6 +47,8 @@ public class GroupModel implements Model {
         this.inheritedPermissions = Lists.newArrayList();
         this.permissions = Lists.newArrayList();
         this.tempPermissions = Lists.newArrayList();
+
+        this.serverPermissions = Maps.newHashMap();
 
         this.groupChain = -1;
         this.groupPriority = -1;
@@ -63,6 +73,14 @@ public class GroupModel implements Model {
 
         this.groupChain = data.getInt("group-chain");
         this.groupPriority = data.getInt("group-priority");
+
+        this.serverPermissions = Maps.newHashMap();
+        if (data.isSet("server-permissions")) {
+            DataSection server = data.getSectionNullable("server-permissions");
+            for (String s : server.keySet()) {
+                this.serverPermissions.put(s, server.getStringList(s));
+            }
+        }
 
         if (data.isSet("users-in-group"))
             this.usersInGroup = data.getInt("users-in-group");
@@ -106,6 +124,14 @@ public class GroupModel implements Model {
             this.inheritedGroups.add(groupModel.getKey());
             PermissionsPlugin.getGroupRegistry().register(this);
         }
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
     }
 
     public void addInheritedGroup(String s) {
@@ -113,16 +139,40 @@ public class GroupModel implements Model {
             this.inheritedGroups.add(s);
             PermissionsPlugin.getGroupRegistry().register(this);
         }
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
     }
 
     public void removeInheritedGroup(GroupModel groupModel) {
         this.inheritedGroups.remove(groupModel.getKey());
         PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
     }
 
     public void removeInheritedGroup(String s) {
         this.inheritedGroups.remove(s);
         PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
     }
 
     public ImmutableList<String> getInheritedPermissions() {
@@ -151,12 +201,28 @@ public class GroupModel implements Model {
             this.permissions.add(permission);
 
         PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
     }
 
     public void removePermission(String permission) {
         this.permissions.remove(permission);
 
         PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
     }
 
     public boolean hasPermission(String permission) {
@@ -184,6 +250,56 @@ public class GroupModel implements Model {
         return this.permissions.contains(permission);
     }
 
+    public ImmutableList<String> getPermissions(ServerType server) {
+        List<String> permissions = this.serverPermissions.containsKey(server.name())
+                ? this.serverPermissions.get(server.name()) : Lists.newArrayList();
+
+        return ImmutableList.copyOf(permissions);
+    }
+
+    public void addPermission(ServerType server, String permission) {
+        if (!this.serverPermissions.containsKey(server.name())) {
+            this.serverPermissions.put(server.name(), Lists.newArrayList());
+        }
+
+        if (!this.serverPermissions.get(server.name()).contains(permission))
+            this.serverPermissions.get(server.name()).add(permission);
+
+        PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
+    }
+
+    public void removePermission(ServerType server, String permission) {
+        if (this.serverPermissions.containsKey(server.name())) {
+            this.serverPermissions.get(server.name()).remove(permission);
+
+            if (this.serverPermissions.get(server.name()).isEmpty()) {
+                this.serverPermissions.remove(server.name());
+            }
+        }
+
+        PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            if (userModel.hasGroup(this)) {
+                PermissionsPlugin.getPermissionsManager().setupPermissions(player);
+            }
+        }
+    }
+
+    public boolean hasPermission(ServerType server, String permission) {
+        return getPermissions(server).contains(permission);
+    }
+
     public int getGroupChain() {
         return groupChain;
     }
@@ -191,6 +307,13 @@ public class GroupModel implements Model {
     public void setGroupChain(int groupChain) {
         this.groupChain = groupChain;
         PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            player.setPlayerListName(ChatColor.translateAlternateColorCodes('&', "&8["
+                    + userModel.getHighestRankingGroup().getPrefix().substring(0, 3) + "&8] &7" + player.getName()));
+        }
     }
 
     public int getGroupPriority() {
@@ -200,6 +323,13 @@ public class GroupModel implements Model {
     public void setGroupPriority(int groupPriority) {
         this.groupPriority = groupPriority;
         PermissionsPlugin.getGroupRegistry().register(this);
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
+
+            player.setPlayerListName(ChatColor.translateAlternateColorCodes('&', "&8["
+                    + userModel.getHighestRankingGroup().getPrefix().substring(0, 3) + "&8] &7" + player.getName()));
+        }
     }
 
     public int getUsersInGroup() {
@@ -235,6 +365,9 @@ public class GroupModel implements Model {
 
         map.put("inherited-groups", this.inheritedGroups);
         map.put("permissions", this.permissions);
+
+        if (!this.serverPermissions.isEmpty())
+            map.put("server-permissions", this.serverPermissions);
 
         map.put("group-chain", this.groupChain);
         map.put("group-priority", this.groupPriority);

@@ -21,6 +21,7 @@ import net.nighthawkempires.permissions.status.StatusTag;
 import net.nighthawkempires.permissions.status.registry.FStatusRegistry;
 import net.nighthawkempires.permissions.status.registry.MStatusRegistry;
 import net.nighthawkempires.permissions.status.registry.StatusRegistry;
+import net.nighthawkempires.permissions.tabcompleters.*;
 import net.nighthawkempires.permissions.user.registry.FUserRegistry;
 import net.nighthawkempires.permissions.user.registry.MUserRegistry;
 import net.nighthawkempires.permissions.user.registry.UserRegistry;
@@ -46,47 +47,77 @@ public class PermissionsPlugin extends JavaPlugin {
         if (getConfigg().getServerType() != ServerType.SETUP) {
             getLogger().info("Server Type has been registered as \'" + getConfigg().getServerType().name() + "\'");
             String pluginName = getPlugin().getName();
-            try {
-                String hostname = getConfigg().getMongoHostname();
-                String database = getConfigg().getMongoDatabase().replaceAll("%PLUGIN%", pluginName);
-                String username = getConfigg().getMongoUsername().replaceAll("%PLUGIN%", pluginName);
-                String password = getConfigg().getMongoPassword();
+            if (getConfigg().useMongo()) {
+                try {
+                    String hostname = getConfigg().getMongoHostname();
+                    String database = getConfigg().getMongoDatabase().replaceAll("%PLUGIN%", pluginName);
+                    String username = getConfigg().getMongoUsername().replaceAll("%PLUGIN%", pluginName);
+                    String password = getConfigg().getMongoPassword();
 
-                ServerAddress serverAddress = new ServerAddress(hostname, 27017);
-                MongoCredential mongoCredential = MongoCredential.createCredential(username, database, password.toCharArray());
-                mongoDatabase = new MongoClient(serverAddress, mongoCredential, new MongoClientOptions.Builder().build()).getDatabase(database);
+                    ServerAddress serverAddress = new ServerAddress(hostname, 27017);
+                    MongoCredential mongoCredential = MongoCredential.createCredential(username, database, password.toCharArray());
+                    mongoDatabase = new MongoClient(serverAddress, mongoCredential, new MongoClientOptions.Builder().build()).getDatabase(database);
 
-                //userRegistry = new MUserRegistry(getMongoDatabase());
-                groupRegistry = new MGroupRegistry(getMongoDatabase());
+                    //userRegistry = new MUserRegistry(getMongoDatabase());
+                    groupRegistry = new MGroupRegistry(getMongoDatabase());
+                    getGroupRegistry().loadAllFromDb();
+                    getGroupRegistry().reloadPerms();
+
+                    statusRegistry = new MStatusRegistry(getMongoDatabase());
+                    getStatusRegistry().loadAllFromDb();
+
+                    userRegistry = new MUserRegistry(getMongoDatabase());
+
+                    permissionsManager = new PermissionsManager();
+
+                    getLogger().info("Successfully connected to MongoDB.");
+
+                    registerCommands();
+                    registerListeners();
+                    registerTabCompleters();
+
+                    CorePlugin.getScoreboardManager().addScoreboard(new PermissionsScoreboard());
+                    CorePlugin.getChatFormat().add(new GroupTag());
+                    CorePlugin.getChatFormat().add(new StatusTag());
+
+                } catch (Exception exception) {
+                    exception.printStackTrace();
+                    getLogger().warning("Could not connect to MongoDB, using file registry...");
+                    groupRegistry = new FGroupRegistry("empires/permissions");
+                    getGroupRegistry().loadAllFromDb();
+
+                    statusRegistry = new FStatusRegistry("empires/permissions");
+                    getStatusRegistry().loadAllFromDb();
+
+                    userRegistry = new FUserRegistry("empires/permissions");
+
+                    permissionsManager = new PermissionsManager();
+
+                    registerCommands();
+                    registerListeners();
+                    registerTabCompleters();
+
+                    CorePlugin.getChatFormat().add(new GroupTag());
+                    CorePlugin.getChatFormat().add(new StatusTag());
+                }
+            } else {
+                groupRegistry = new FGroupRegistry("empires/permissions");
                 getGroupRegistry().loadAllFromDb();
                 getGroupRegistry().reloadPerms();
 
-                statusRegistry = new MStatusRegistry(getMongoDatabase());
+                statusRegistry = new FStatusRegistry("empires/permissions");
                 getStatusRegistry().loadAllFromDb();
 
-                userRegistry = new MUserRegistry(getMongoDatabase());
+                userRegistry = new FUserRegistry("empires/permissions");
 
                 permissionsManager = new PermissionsManager();
 
-                getLogger().info("Successfully connected to MongoDB.");
-
                 registerCommands();
                 registerListeners();
+                registerTabCompleters();
 
-                CorePlugin.getScoreboardManager().addScoreboard(new PermissionsScoreboard());
                 CorePlugin.getChatFormat().add(new GroupTag());
                 CorePlugin.getChatFormat().add(new StatusTag());
-
-            } catch (Exception exception) {
-                exception.printStackTrace();
-                getLogger().warning("Could not connect to MongoDB, using file registry...");
-                groupRegistry = new FGroupRegistry("empires/groups");
-                getGroupRegistry().loadAllFromDb();
-
-                statusRegistry = new FStatusRegistry("empires/status");
-                getStatusRegistry().loadAllFromDb();
-
-                userRegistry = new FUserRegistry("empires/users");
             }
         }
     }
@@ -106,6 +137,14 @@ public class PermissionsPlugin extends JavaPlugin {
     public void registerListeners() {
         getPluginManager().registerEvents(new PlayerListener(), this);
         getPluginManager().registerEvents(new PluginListener(), this);
+    }
+
+    public void registerTabCompleters() {
+        this.getCommand("demote").setTabCompleter(new DemoteTabCompleter());
+        this.getCommand("group").setTabCompleter(new GroupTabCompleter());
+        this.getCommand("permissions").setTabCompleter(new PermissionsTabCompleter());
+        this.getCommand("promote").setTabCompleter(new PromoteTabCompleter());
+        this.getCommand("status").setTabCompleter(new StatusTabCompleter());
     }
 
     public static GroupRegistry getGroupRegistry() {

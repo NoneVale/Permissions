@@ -26,7 +26,7 @@ public class DemoteCommand implements CommandExecutor {
             Player player = (Player) sender;
             UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
 
-            if (!player.hasPermission("ne.admin") || !player.hasPermission("ne.permissions.admin")) {
+            if (!player.hasPermission("ne.admin") && !player.hasPermission("ne.permissions.admin")) {
                 player.sendMessage(getMessages().getChatTag(Messages.NO_PERMS));
                 return true;
             }
