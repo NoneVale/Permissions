@@ -1,6 +1,7 @@
 package net.nighthawkempires.permissions.commands;
 
 import net.nighthawkempires.core.lang.Messages;
+import net.nighthawkempires.core.util.StringUtil;
 import net.nighthawkempires.permissions.lang.PermissionsMessages;
 import net.nighthawkempires.permissions.status.StatusModel;
 import net.nighthawkempires.permissions.user.UserModel;
@@ -237,7 +238,7 @@ public class StatusCommand implements CommandExecutor {
                             statusModel = getStatusRegistry().getStatus(name);
                             statusModel.setPrefix(prefix);
                             player.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You have set status " + statusModel.getName() + "'s prefix to "
-                                    + ChatColor.translateAlternateColorCodes('&', prefix)));
+                                    + StringUtil.colorify(prefix)));
                             return true;
                         default:
                             player.sendMessage(getMessages().getChatTag(Messages.INVALID_SYNTAX));

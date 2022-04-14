@@ -2,6 +2,7 @@ package net.nighthawkempires.permissions.commands;
 
 import net.nighthawkempires.core.lang.Messages;
 import net.nighthawkempires.core.server.ServerType;
+import net.nighthawkempires.core.util.StringUtil;
 import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.events.GroupChangeEvent;
 import net.nighthawkempires.permissions.group.GroupModel;
@@ -14,6 +15,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 
 import static net.nighthawkempires.core.CorePlugin.getCommandManager;
@@ -64,8 +66,7 @@ public class GroupCommand implements CommandExecutor {
     };
 
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (sender instanceof Player) {
-            Player player = (Player) sender;
+        if (sender instanceof Player player) {
             UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
 
             if (!player.hasPermission("ne.admin") && !player.hasPermission("ne.permissions.admin")) {
@@ -685,7 +686,7 @@ public class GroupCommand implements CommandExecutor {
                             groupModel = getGroupRegistry().getGroup(name);
                             groupModel.setPrefix(prefix);
                             player.sendMessage(getMessages().getChatMessage(GRAY + "You have set group " + groupModel.getColoredName() + GRAY + "'s " + GRAY + "prefix to "
-                                    + translateAlternateColorCodes('&', prefix)));
+                                    + StringUtil.colorify(prefix)));
                             return true;
                         case "setpriority":
                             name = args[1];
@@ -801,7 +802,643 @@ public class GroupCommand implements CommandExecutor {
                     player.sendMessage(getMessages().getChatTag(Messages.INVALID_SYNTAX));
                     return true;
             }
+        } else  {
+            switch (args.length) {
+                case 0:
+                    sender.sendMessage(helpPage1);
+                    return true;
+                case 1:
+                    switch (args[0].toLowerCase()) {
+                        case "help":
+                            sender.sendMessage(helpPage1);
+                            return true;
+                        case "list":
+                            StringBuilder groupBuilder = new StringBuilder();
+                            groupBuilder.append(translateAlternateColorCodes('&', "&8 - "));
+                            for (GroupModel groupModel : getGroupRegistry().getGroups()) {
+                                groupBuilder.append(groupModel.getColoredName() + GRAY).append(translateAlternateColorCodes('&',
+                                        " &8[&6" + groupModel.getGroupChain() + "&8] [&6" + groupModel.getGroupPriority() + "&8]&7, "));
+                            }
+
+                            if (getGroupRegistry().getGroups().isEmpty()) {
+                                groupBuilder.append(translateAlternateColorCodes('&', "&8Noneee"));
+                            }
+
+                            String[] list = new String[] {
+                                    getMessages().getMessage(Messages.CHAT_HEADER),
+                                    translateAlternateColorCodes('&', "&8List&7: Groups"),
+                                    getMessages().getMessage(Messages.CHAT_FOOTER),
+                                    translateAlternateColorCodes('&', "&8Groups&7: "),
+                                    groupBuilder.toString().substring(0, groupBuilder.toString().length() - 2),
+                                    getMessages().getMessage(Messages.CHAT_FOOTER)
+                            };
+                            sender.sendMessage(list);
+                            return true;
+                        default:
+                            sender.sendMessage(getMessages().getChatTag(Messages.INVALID_SYNTAX));
+                            return true;
+                    }
+                case 2:
+                    switch (args[0].toLowerCase()) {
+                        case "delete":
+                            String name = args[1];
+                            if (!getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            GroupModel groupModel = getGroupRegistry().getGroup(name);
+                            for (UserModel model : getUserRegistry().loadAllFromDb().values())
+                                if (model.getGroups().contains(groupModel))
+                                    model.removeGroup(groupModel);
+
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + groupModel.getColoredName() + GRAY + " has been successfully deleted."));
+                            for (Player players : Bukkit.getOnlinePlayers()) {
+                                Bukkit.getPluginManager().callEvent(new GroupChangeEvent(players));
+                            }
+
+                            getGroupRegistry().deleteGroup(groupModel);
+                            return true;
+                        case "demote":
+                            String targetName = args[1];
+                            OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
+                            if (!PermissionsPlugin.getUserRegistry().userExists(target.getUniqueId())) {
+                                sender.sendMessage(getMessages().getChatTag(Messages.PLAYER_NOT_FOUND));
+                                return true;
+                            }
+
+                            UserModel targetUserModel = PermissionsPlugin.getUserRegistry().getUser(target.getUniqueId());
+                            GroupModel demoteTo = PermissionsPlugin.getGroupRegistry().getNextGroupDown(targetUserModel.getHighestRankingGroup());
+
+                            if (demoteTo == null) {
+                                sender.sendMessage(getMessages().getChatMessage(GREEN + target.getName() + ChatColor.GRAY
+                                        + " is not able to be demoted as they're already the lowest rank in the demotion chain."));
+                                return true;
+                            }
+
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You have demoted " + GREEN + target.getName() + ChatColor.GRAY
+                                    + " to group " + demoteTo.getColoredName() + GRAY + ChatColor.GRAY + "."));
+                            if (target.isOnline()) {
+                                target.getPlayer().sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You have been demoted to " + demoteTo.getColoredName() + GRAY
+                                        + ChatColor.GRAY + "."));
+                                PermissionsPlugin.getPermissionsManager().setupPermissions(target.getPlayer());
+                                Bukkit.getPluginManager().callEvent(new GroupChangeEvent(target.getPlayer()));
+                            }
+                            targetUserModel.getHighestRankingGroup().setUsersInGroup(targetUserModel.getHighestRankingGroup().getUsersInGroup() - 1);
+                            targetUserModel.removeGroup(targetUserModel.getHighestRankingGroup());
+                            demoteTo.setUsersInGroup(demoteTo.getUsersInGroup() + 1);
+                            targetUserModel.addGroup(demoteTo);
+                            return true;
+                        case "help":
+                            if (!NumberUtils.isNumber(args[1])) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "The page must be a number instead of a string."));
+                                return true;
+                            }
+
+                            int page = Integer.parseInt(args[1]);
+                            if (page != 1 && page != 2) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "That page does not exist, please choose between page 1 or 2."));
+                                return true;
+                            }
+
+                            if (page == 1)
+                                sender.sendMessage(helpPage1);
+                            else
+                                sender.sendMessage(helpPage2);
+                            return true;
+                        case "info":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            StringBuilder permissionsBuilder = new StringBuilder();
+                            if (getGroupRegistry().getGroupPermissions(groupModel).isEmpty())
+                                permissionsBuilder.append(ChatColor.GRAY).append("Noneee");
+                            else {
+                                for (String permission : getGroupRegistry().getGroupPermissions(groupModel))
+                                    if (permission.startsWith("-"))
+                                        permissionsBuilder.append(RED).append(permission.substring(1)).append(ChatColor.GRAY).append(", ");
+                                    else
+                                        permissionsBuilder.append(GREEN).append(permission).append(ChatColor.GRAY).append(", ");
+                            }
+
+                            StringBuilder inheritedGroupsBuilder = new StringBuilder();
+                            if (groupModel.getInheritedGroups().isEmpty())
+                                inheritedGroupsBuilder.append(ChatColor.GRAY).append("Noneee");
+                            else {
+                                for (String inheritedGroupName : groupModel.getInheritedGroups()) {
+                                    GroupModel inheritedGroupModel = PermissionsPlugin.getGroupRegistry().getGroup(inheritedGroupName);
+                                    inheritedGroupsBuilder.append(inheritedGroupModel.getColoredName() + GRAY).append(ChatColor.GRAY).append(", ");
+                                }
+                            }
+
+                            StringBuilder inheritedPermissionsBuilder = new StringBuilder();
+                            if (getGroupRegistry().getInheritedPermissions(groupModel).isEmpty())
+                                inheritedPermissionsBuilder.append(ChatColor.GRAY).append("Noneee");
+                            else {
+                                for (String permission : getGroupRegistry().getInheritedPermissions(groupModel)) {
+                                    if (permission.startsWith("-"))
+                                        inheritedPermissionsBuilder.append(RED).append(permission.substring(1)).append(ChatColor.GRAY).append(", ");
+                                    else
+                                        inheritedPermissionsBuilder.append(GREEN).append(permission).append(ChatColor.GRAY).append(", ");
+                                }
+                            }
+
+                            StringBuilder serverPermissionsBuilder = new StringBuilder();
+                            if (getGroupRegistry().getServerPermissions(groupModel).isEmpty())
+                                serverPermissionsBuilder.append(ChatColor.GRAY).append("Noneee");
+                            else {
+                                for (String permission : getGroupRegistry().getServerPermissions(groupModel)) {
+                                    if (permission.startsWith("-"))
+                                        serverPermissionsBuilder.append(RED).append(permission.substring(1)).append(ChatColor.GRAY).append(", ");
+                                    else
+                                        serverPermissionsBuilder.append(GREEN).append(permission).append(ChatColor.GRAY).append(", ");
+                                }
+                            }
+
+                            StringBuilder allPermissionsBuilder = new StringBuilder();
+                            if (getGroupRegistry().getAllPermissions(groupModel).isEmpty())
+                                allPermissionsBuilder.append(ChatColor.GRAY).append("Noneee");
+                            else {
+                                for (String permission : getGroupRegistry().getAllPermissions(groupModel)) {
+                                    if (permission.startsWith("-"))
+                                        allPermissionsBuilder.append(RED).append(permission.substring(1)).append(ChatColor.GRAY).append(", ");
+                                    else
+                                        allPermissionsBuilder.append(GREEN).append(permission).append(ChatColor.GRAY).append(", ");
+                                }
+                            }
+
+                            String[] info = new String[] {
+                                    getMessages().getMessage(Messages.CHAT_HEADER),
+                                    translateAlternateColorCodes('&', "&8Group Info&7: &b" + groupModel.getName()),
+                                    getMessages().getMessage(Messages.CHAT_FOOTER),
+                                    translateAlternateColorCodes('&', "&8Prefix&7: " + groupModel.getPrefix()),
+                                    translateAlternateColorCodes('&', "&8Chain&7: &6" + groupModel.getGroupChain()
+                                            + "    &8-    Priority&7: &6" + groupModel.getGroupPriority()),
+                                    translateAlternateColorCodes('&', "&8Users In Group&7: &6" + groupModel.getUsersInGroup()),
+                                    translateAlternateColorCodes('&', "&8Default&7: " + (groupModel.isDefaultGroup() ? "&aYes" : "&cNo")),
+                                    translateAlternateColorCodes('&', "&8Permissions&7: "
+                                            + permissionsBuilder.toString().substring(0, permissionsBuilder.toString().length() - 2)),
+                                    translateAlternateColorCodes('&', "&8Inherited Groups&7: "
+                                            + inheritedGroupsBuilder.toString().substring(0, inheritedGroupsBuilder.toString().length() - 2)),
+                                    translateAlternateColorCodes('&', "&8Inherited Permissions&7: "
+                                            + inheritedPermissionsBuilder.toString().substring(0, inheritedPermissionsBuilder.toString().length() - 2)),
+                                    translateAlternateColorCodes('&', "&8Server Permissions&7: "
+                                            + serverPermissionsBuilder.toString().substring(0, serverPermissionsBuilder.toString().length() - 2)),
+                                    translateAlternateColorCodes('&', "&8All Permissions&7: "
+                                            + allPermissionsBuilder.toString().substring(0, allPermissionsBuilder.toString().length() - 2)),
+                                    getMessages().getMessage(Messages.CHAT_FOOTER)
+                            };
+                            sender.sendMessage(info);
+                            return true;
+                        case "promote":
+                            targetName = args[1];
+                            target = Bukkit.getOfflinePlayer(targetName);
+                            if (!PermissionsPlugin.getUserRegistry().userExists(target.getUniqueId())) {
+                                sender.sendMessage(getMessages().getChatTag(Messages.PLAYER_NOT_FOUND));
+                                return true;
+                            }
+
+                            targetUserModel = PermissionsPlugin.getUserRegistry().getUser(target.getUniqueId());
+                            GroupModel promoteTo = PermissionsPlugin.getGroupRegistry().getNextGroupUp(targetUserModel.getHighestRankingGroup());
+
+                            if (promoteTo == null) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "" + GREEN + target.getName()
+                                        + ChatColor.GRAY + " is not able to be promoted as theyre already the highest rank in the promotion chain."));
+                                return true;
+                            }
+
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You have promoted " + GREEN + target.getName() + ChatColor.GRAY
+                                    + " to group " + promoteTo.getName() + "."));
+                            if (target.isOnline()) {
+                                target.getPlayer().sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You have been promoted to " + promoteTo.getName() + "."));
+                                PermissionsPlugin.getPermissionsManager().setupPermissions(target.getPlayer());
+                                Bukkit.getPluginManager().callEvent(new GroupChangeEvent(target.getPlayer()));
+                            }
+                            targetUserModel.getHighestRankingGroup().setUsersInGroup(targetUserModel.getHighestRankingGroup().getUsersInGroup() - 1);
+                            targetUserModel.removeGroup(targetUserModel.getHighestRankingGroup());
+                            promoteTo.setUsersInGroup(promoteTo.getUsersInGroup() + 1);
+                            targetUserModel.addGroup(promoteTo);
+                            return true;
+                        case "setdefault":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            PermissionsPlugin.getGroupRegistry().getDefaultGroup().setDefaultGroup(false);
+                            groupModel.setDefaultGroup(true);
+
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY + " has been set as the default group."));
+                            return true;
+                        case "view":
+                            name = args[1];
+                            target = Bukkit.getOfflinePlayer(name);
+                            if (!PermissionsPlugin.getUserRegistry().userExists(target.getUniqueId())) {
+                                sender.sendMessage(getMessages().getChatTag(Messages.PLAYER_NOT_FOUND));
+                                return true;
+                            }
+
+                            targetUserModel = PermissionsPlugin.getUserRegistry().getUser(target.getUniqueId());
+
+                            StringBuilder groupBuilder = new StringBuilder();
+                            if (targetUserModel.getGroups().isEmpty())
+                                groupBuilder.append(ChatColor.GRAY).append("Noneee");
+                            else {
+                                for (GroupModel groupModels : targetUserModel.getGroups()) {
+                                    groupBuilder.append(groupModels.getColoredName() + GRAY).append(ChatColor.GRAY).append(", ");
+                                }
+                            }
+
+                            String statusString = "&7None";
+                            if (targetUserModel.getStatus() != null) {
+                                statusString = targetUserModel.getStatus().getColoredName() + GRAY;
+                            }
+
+                            permissionsBuilder = new StringBuilder();
+
+                            if (targetUserModel.getPermissions().isEmpty())
+                                permissionsBuilder.append(ChatColor.GRAY).append("Noneee");
+                            else {
+                                for (String permission : targetUserModel.getPermissions()) {
+                                    if (permission.startsWith("-"))
+                                        permissionsBuilder.append(RED).append(permission.substring(1)).append(ChatColor.GRAY).append(", ");
+                                    else
+                                        permissionsBuilder.append(GREEN).append(permission).append(ChatColor.GRAY).append(", ");
+                                }
+                            }
+
+                            info = new String[] {
+                                    getMessages().getMessage(Messages.CHAT_HEADER),
+                                    translateAlternateColorCodes('&', "&8User Info&7: &b" + target.getName()),
+                                    getMessages().getMessage(Messages.CHAT_FOOTER),
+                                    translateAlternateColorCodes('&', "&8Groups&7: "
+                                            + groupBuilder.toString().substring(0, groupBuilder.toString().length() - 2)),
+                                    translateAlternateColorCodes('&', "&8Status&7: " + statusString),
+                                    translateAlternateColorCodes('&', "&8Permissions&7: "
+                                            + permissionsBuilder.toString().substring(0, permissionsBuilder.toString().length() - 2)),
+                                    getMessages().getMessage(Messages.CHAT_FOOTER)
+                            };
+                            sender.sendMessage(info);
+                            return true;
+                        default:
+                            sender.sendMessage(getMessages().getChatTag(Messages.INVALID_SYNTAX));
+                            return true;
+                    }
+                case 3:
+                    switch (args[0].toLowerCase()) {
+                        case "add":
+                            String name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            GroupModel groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            String targetName = args[2];
+                            OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
+                            if (!PermissionsPlugin.getUserRegistry().userExists(target.getUniqueId())) {
+                                sender.sendMessage(getMessages().getChatTag(Messages.PLAYER_NOT_FOUND));
+                                return true;
+                            }
+
+                            UserModel targetUserModel =  PermissionsPlugin.getUserRegistry().getUser(target.getUniqueId());
+
+                            if (targetUserModel.hasGroup(groupModel)) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "" + GREEN + target.getName() + ChatColor.GRAY
+                                        + " already has that group."));
+                                return true;
+                            }
+
+                            groupModel.setUsersInGroup(groupModel.getUsersInGroup() + 1);
+                            targetUserModel.addGroup(groupModel);
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You have added group " + groupModel.getColoredName() + GRAY + ChatColor.GRAY
+                                    + " to " + GREEN + target.getName() + ChatColor.GRAY + "."));
+                            if (target.isOnline()) {
+                                target.getPlayer().sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY + ChatColor.GRAY
+                                        + " has been added to you."));
+                                PermissionsPlugin.getPermissionsManager().setupPermissions(target.getPlayer());
+                                Bukkit.getPluginManager().callEvent(new GroupChangeEvent(target.getPlayer()));
+                            }
+                            return true;
+                        case "addinherit":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            String inheritGroupName = args[2];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(inheritGroupName)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            GroupModel inheritGroupModel = PermissionsPlugin.getGroupRegistry().getGroup(inheritGroupName);
+
+                            if (groupModel.getInheritedGroups().contains(inheritGroupModel.getKey())) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getName()
+                                        + " already inherits group " + inheritGroupModel.getName() + "."));
+                                return true;
+                            }
+
+                            if (inheritGroupModel.getInheritedGroups().contains(groupModel.getKey())) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getName()
+                                        + " cannot inherit group " + inheritGroupModel.getName() + " as it is inherited by that group."));
+                                return true;
+                            }
+
+                            groupModel.addInheritedGroup(inheritGroupModel);
+                            PermissionsPlugin.getGroupRegistry().reloadPerms();
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getName() + " now inherits group "
+                                    + inheritGroupModel.getName() + "."));
+                            return true;
+                        case "addperm":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            String permission = args[2];
+
+                            if (groupModel.hasPermission(permission)) {
+                                sender.sendMessage(getMessages().getChatMessage(groupModel.getColoredName() + GRAY + ChatColor.GRAY
+                                        + " already has permission " + permission + "."));
+                                return true;
+                            }
+
+                            groupModel.addPermission(permission);
+                            PermissionsPlugin.getGroupRegistry().reloadPerms();
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Permission " + WHITE
+                                    + permission + ChatColor.GRAY + " has been added to group " + groupModel.getColoredName() + GRAY + "."));
+                            return true;
+                        case "create":
+                            name = args[1];
+                            if (getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_ALREADY_EXISTS));
+                                return true;
+                            }
+
+                            getGroupRegistry().createGroup(name, args[2]);
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + getGroupRegistry().getGroup(name).getColoredName() + GRAY
+                                    + ChatColor.GRAY + " has been successfully created."));
+                            return true;
+                        case "reminherit":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            inheritGroupName = args[2];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(inheritGroupName)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            inheritGroupModel = PermissionsPlugin.getGroupRegistry().getGroup(inheritGroupName);
+
+                            if (!groupModel.getInheritedGroups().contains(inheritGroupModel.getKey())) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY
+                                        + " does not inherit group " + inheritGroupModel.getColoredName() + GRAY + "."));
+                                return true;
+                            }
+
+                            groupModel.removeInheritedGroup(inheritGroupModel);
+                            PermissionsPlugin.getGroupRegistry().reloadPerms();
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY + " no longer inherits group "
+                                    + inheritGroupModel.getColoredName() + GRAY + "."));
+                            return true;
+                        case "remove":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            targetName = args[2];
+                            target = Bukkit.getOfflinePlayer(targetName);
+                            if (!PermissionsPlugin.getUserRegistry().userExists(target.getUniqueId())) {
+                                sender.sendMessage(getMessages().getChatTag(Messages.PLAYER_NOT_FOUND));
+                                return true;
+                            }
+
+                            targetUserModel = PermissionsPlugin.getUserRegistry().getUser(target.getUniqueId());
+
+                            if (!targetUserModel.hasGroup(groupModel)) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "" + GREEN + target.getName() + ChatColor.GRAY
+                                        + " does not have that group."));
+                                return true;
+                            }
+
+                            if (targetUserModel.getGroups().size() == 1) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You can not remove any more groups from that player."));
+                                return true;
+                            }
+
+                            groupModel.setUsersInGroup(groupModel.getUsersInGroup() - 1);
+                            targetUserModel.removeGroup(groupModel);
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "You have removed group " + groupModel.getColoredName() + GRAY + " from " + GREEN
+                                    + target.getName() + ChatColor.GRAY + "."));
+                            if (target.isOnline()) {
+                                target.getPlayer().sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY + " has been removed from you."));
+                                PermissionsPlugin.getPermissionsManager().setupPermissions(target.getPlayer());
+                                Bukkit.getPluginManager().callEvent(new GroupChangeEvent(target.getPlayer()));
+                            }
+                            return true;
+                        case "remperm":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            permission = args[2];
+
+                            if (!groupModel.getPermissions().contains(permission)) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY
+                                        + " does not have permission " + WHITE + permission + ChatColor.GRAY + "."));
+                                return true;
+                            }
+
+                            groupModel.removePermission(permission);
+                            PermissionsPlugin.getGroupRegistry().reloadPerms();
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Permission " + WHITE + permission + ChatColor.GRAY
+                                    + " has been removed from group " + groupModel.getColoredName() + GRAY + "."));
+                            return true;
+                        case "setchain":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            if (!NumberUtils.isNumber(args[2])) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "The chain must be a number instead of a string."));
+                                return true;
+                            }
+
+                            int chain = Integer.parseInt(args[2]);
+
+                            if (groupModel.getGroupChain() == chain) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY
+                                        + " is already set to chain " + GOLD + chain + ChatColor.GRAY + "."));
+                                return true;
+                            }
+
+                            groupModel.setGroupChain(chain);
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY + " has been set to chain "
+                                    + GOLD + chain + ChatColor.GRAY + "."));
+                            return true;
+                        case "setprefix":
+                            name = args[1];
+                            if (!getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            String prefix = args[2];
+
+                            groupModel = getGroupRegistry().getGroup(name);
+                            groupModel.setPrefix(prefix);
+                            sender.sendMessage(getMessages().getChatMessage(GRAY + "You have set group " + groupModel.getColoredName() + GRAY + "'s " + GRAY + "prefix to "
+                                    + StringUtil.colorify(prefix)));
+                            return true;
+                        case "setpriority":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            if (!NumberUtils.isNumber(args[2])) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "The priority must be a number instead of a string."));
+                                return true;
+                            }
+
+                            int priority = Integer.parseInt(args[2]);
+
+                            if (groupModel.getGroupPriority() == priority) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY + GRAY
+                                        + " is already set to priority " + GOLD + priority + ChatColor.GRAY + "."));
+                                return true;
+                            }
+
+                            groupModel.setGroupPriority(priority);
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY + " has been set to priority "
+                                    + GOLD + priority + ChatColor.GRAY + "."));
+                            return true;
+                        default:
+                            sender.sendMessage(getMessages().getChatTag(Messages.INVALID_SYNTAX));
+                            return true;
+                    }
+                case 4:
+                    switch (args[0].toLowerCase()) {
+                        case "addperm":
+                            String name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            GroupModel groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            String permission = args[2].toLowerCase();
+
+                            String type = args[3];
+                            ServerType serverType = null;
+                            for (ServerType types : ServerType.values()) {
+                                if (types.name().toLowerCase().equals(type.toLowerCase())) {
+                                    serverType = types;
+                                    break;
+                                }
+                            }
+                            if (serverType == null) {
+                                sender.sendMessage(getMessages().getChatMessage(GRAY + "That server type does not exist, please make sure you spelled it correctly."));
+                                return true;
+                            }
+
+                            if (groupModel.hasPermission(serverType, permission)) {
+                                sender.sendMessage(getMessages().getChatMessage(groupModel.getColoredName() + GRAY + ChatColor.GRAY
+                                        + " already has server permission " + WHITE + permission + GRAY + " on " + WHITE
+                                        + serverType.name() + GRAY +  "."));
+                                return true;
+                            }
+
+                            groupModel.addPermission(serverType, permission);
+                            PermissionsPlugin.getGroupRegistry().reloadPerms();
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Server permission " + WHITE
+                                    + permission + ChatColor.GRAY + " has been added to group " + groupModel.getColoredName() + GRAY + " on "
+                                    + WHITE + serverType.name() + GRAY + "."));
+                            return true;
+                        case "remperm":
+                            name = args[1];
+                            if (!PermissionsPlugin.getGroupRegistry().groupExists(name)) {
+                                sender.sendMessage(getMessages().getChatTag(PermissionsMessages.GROUP_DOES_NOT_EXIST));
+                                return true;
+                            }
+
+                            groupModel = PermissionsPlugin.getGroupRegistry().getGroup(name);
+
+                            permission = args[2].toLowerCase();
+
+                            type = args[3];
+                            serverType = null;
+                            for (ServerType types : ServerType.values()) {
+                                if (types.name().toLowerCase().equals(type.toLowerCase())) {
+                                    serverType = types;
+                                    break;
+                                }
+                            }
+                            if (serverType == null) {
+                                sender.sendMessage(getMessages().getChatMessage(GRAY + "That server type does not exist, please make sure you spelled it correctly."));
+                                return true;
+                            }
+
+                            if (!groupModel.hasPermission(serverType, permission)) {
+                                sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Group " + groupModel.getColoredName() + GRAY
+                                        + " does not have permission " + WHITE + permission + ChatColor.GRAY + " on " + WHITE
+                                        + serverType.name() + GRAY + "."));
+                                return true;
+                            }
+
+                            groupModel.removePermission(serverType, permission);
+                            PermissionsPlugin.getGroupRegistry().reloadPerms();
+                            sender.sendMessage(getMessages().getChatMessage(ChatColor.GRAY + "Server permission " + WHITE + permission + ChatColor.GRAY
+                                    + " has been removed from group " + groupModel.getColoredName() + GRAY + " on " + WHITE
+                                    + serverType.name() + GRAY + "."));
+                            return true;
+                        default:
+                            sender.sendMessage(getMessages().getChatTag(Messages.INVALID_SYNTAX));
+                            return true;
+                    }
+                default:
+                    sender.sendMessage(getMessages().getChatTag(Messages.INVALID_SYNTAX));
+                    return true;
+            }
         }
-        return false;
     }
 }

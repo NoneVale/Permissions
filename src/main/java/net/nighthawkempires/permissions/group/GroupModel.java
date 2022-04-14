@@ -3,10 +3,10 @@ package net.nighthawkempires.permissions.group;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import jdk.nashorn.internal.ir.IfNode;
 import net.nighthawkempires.core.datasection.DataSection;
 import net.nighthawkempires.core.datasection.Model;
 import net.nighthawkempires.core.server.ServerType;
+import net.nighthawkempires.core.util.StringUtil;
 import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.user.UserModel;
 import org.bukkit.Bukkit;
@@ -343,12 +343,20 @@ public class GroupModel implements Model {
 
     public String getColoredName() {
         if (!getPrefix().startsWith("&")) return getName();
-        return ChatColor.translateAlternateColorCodes('&', getPrefix().substring(0, 2) + getName());
+        if (StringUtil.hasHexCode(getPrefix())) {
+            return net.md_5.bungee.api.ChatColor.of(StringUtil.getHexCode(getPrefix())) + getName();
+        } else {
+            return ChatColor.translateAlternateColorCodes('&', getPrefix().substring(0, 2) + getName());
+        }
     }
 
     public String getBoldColoredName() {
         if (!getPrefix().startsWith("&")) return getName();
-        return ChatColor.translateAlternateColorCodes('&', getPrefix().substring(0, 2) + "&l" + getName());
+        if (StringUtil.hasHexCode(getPrefix())) {
+            return net.md_5.bungee.api.ChatColor.of(StringUtil.getHexCode(getPrefix())) + "" + ChatColor.BOLD + getName();
+        } else {
+            return ChatColor.translateAlternateColorCodes('&', getPrefix().substring(0, 2) + "&l" + getName());
+        }
     }
 
     public String getKey() {

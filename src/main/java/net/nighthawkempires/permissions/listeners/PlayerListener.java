@@ -1,5 +1,6 @@
 package net.nighthawkempires.permissions.listeners;
 
+import net.nighthawkempires.core.util.StringUtil;
 import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.events.GroupChangeEvent;
 import net.nighthawkempires.permissions.user.UserModel;
@@ -25,8 +26,7 @@ public class PlayerListener implements Listener {
         Player player = event.getPlayer();
         UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
 
-        player.setPlayerListName(ChatColor.translateAlternateColorCodes('&', "&8["
-                + userModel.getHighestRankingGroup().getPrefix().substring(0, 3) + "&8] &7" + player.getName()));
+        player.setPlayerListName(StringUtil.colorify(userModel.getHighestRankingGroup().getPrefix()) + " " + ChatColor.GRAY + player.getName());
     }
 
     @EventHandler
@@ -35,7 +35,6 @@ public class PlayerListener implements Listener {
         UserModel userModel = PermissionsPlugin.getUserRegistry().getUser(player.getUniqueId());
 
         PermissionsPlugin.getPermissionsManager().setupPermissions(player);
-        player.setPlayerListName(ChatColor.translateAlternateColorCodes('&', "&8["
-                + userModel.getHighestRankingGroup().getPrefix().substring(0, 3) + "&8] &7" + player.getName()));
+        player.setPlayerListName(StringUtil.colorify(userModel.getHighestRankingGroup().getPrefix()) + " " + ChatColor.GRAY + player.getName());
     }
 }

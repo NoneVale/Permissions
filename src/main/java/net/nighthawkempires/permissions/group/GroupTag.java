@@ -4,6 +4,7 @@ import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.nighthawkempires.core.chat.tag.PlayerTag;
+import net.nighthawkempires.core.util.StringUtil;
 import net.nighthawkempires.permissions.PermissionsPlugin;
 import net.nighthawkempires.permissions.user.UserModel;
 import org.bukkit.entity.Player;
@@ -17,8 +18,7 @@ public class GroupTag extends PlayerTag {
             if (userModel.getHighestRankingGroup() != null) {
                 TextComponent tag = new TextComponent("[");
                 tag.setColor(ChatColor.DARK_GRAY);
-                TextComponent mid = new TextComponent(ChatColor.translateAlternateColorCodes('&',
-                        userModel.getHighestRankingGroup().getPrefix()));
+                TextComponent mid = new TextComponent(TextComponent.fromLegacyText(StringUtil.colorify(userModel.getHighestRankingGroup().getPrefix())));
                 tag.addExtra(mid);
                 tag.addExtra("]");
 
